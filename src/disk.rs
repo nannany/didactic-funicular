@@ -1,6 +1,6 @@
 use std::fs::{File, OpenOptions};
 use std::io;
-use std::io::{Read, SeekFrom, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 pub const PAGE_SIZE: usize = 4096;
@@ -11,6 +11,12 @@ pub struct DiskManager {
 }
 
 pub struct PageId(pub u64);
+
+impl PageId {
+    pub fn to_u64(self) -> u64 {
+        self.0
+    }
+}
 
 impl DiskManager {
     pub fn new(heap_file: File) -> io::Result<Self> {
