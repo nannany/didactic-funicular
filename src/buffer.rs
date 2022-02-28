@@ -26,6 +26,16 @@ pub struct Buffer {
     pub is_dirty: Cell<bool>,
 }
 
+impl Default for Buffer {
+    fn default() -> Self {
+        Self {
+            page_id: Default::default(),
+            page: RefCell::new([0u8; PAGE_SIZE]),
+            is_dirty: Cell::new(false),
+        }
+    }
+}
+
 pub struct Frame {
     usage_count: u64,
     buffer: Rc<Buffer>,
@@ -141,10 +151,19 @@ impl BufferPoolManager {
         let evict_page_id = frame.buffer.page_id;
         let page_id = {
             let buffer = Rc::get_mut(&mut frame.buffer).unwrap();
-            if buffer.is_dirty.get(){
+            if buffer.is_dirty.get() {
                 self.disk
                     .write_page_data(evict_page_id, buffer.page.get_mut())?;
             }
-        }
+            let page_id = self.disk.allocate_page();
+            *buffer = Buffer::default();
+            buffer.is_dirty.set(true);
+            frame.usage_count = 1;
+            page_id
+        };
+        let page = Rc::clone(&frame.buffer);
+        self.page_table.remove(&evict_page_id);
+        self.page_table.insert(page_id, buffer_id);
+        Ok(page)
     }
 }
