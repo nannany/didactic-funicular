@@ -15,7 +15,7 @@ pub enum Error {
 }
 
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Hash)]
-pub struct BufferId(pub u64);
+pub struct BufferId(usize);
 
 pub type Page = [u8; PAGE_SIZE];
 
@@ -36,6 +36,7 @@ impl Default for Buffer {
     }
 }
 
+#[derive(Debug, Default)]
 pub struct Frame {
     usage_count: u64,
     buffer: Rc<Buffer>,
@@ -49,7 +50,7 @@ pub struct BufferPool {
 impl BufferPool {
     pub fn new(pool_size: usize) -> Self {
         let mut buffers = vec![];
-        buffers.resize_with(pool_size, Default::default());
+        buffers.resize_with(pool_size, Default::default);
         let next_victim_id = BufferId::default();
         Self {
             buffers,
@@ -113,7 +114,7 @@ pub struct BufferPoolManager {
 }
 
 impl BufferPoolManager {
-    pub fn new(disk: DiskManager, pool: BufferPool, page_table: HashMap<PageId, BufferId>) -> Self {
+    pub fn new(disk: DiskManager, pool: BufferPool) -> Self {
         let page_table = HashMap::new();
         Self { disk, pool, page_table }
     }
@@ -165,5 +166,16 @@ impl BufferPoolManager {
         self.page_table.remove(&evict_page_id);
         self.page_table.insert(page_id, buffer_id);
         Ok(page)
+    }
+
+    pub fn flush(&mut self) -> Result<(), Error> {
+        for (&page_id, &buffer_id) in self.page_table.iter() {
+            let frame = &self.pool[buffer_id];
+            let mut page = frame.buffer.page.borrow_mut();
+            self.disk.write_page_data(page_id, page.as_mut())?;
+            frame.buffer.is_dirty.set(false);
+        }
+        self.disk.sync()?;
+        Ok(())
     }
 }
